@@ -1,0 +1,203 @@
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include <cstdlib> // Для malloc, free, динамическая память
+#include <cstring> // Для memcpy, строки и массивы
+using namespace std;
+
+class AdjacencyMatrix { 
+private:
+    int size; //кол-во вершин
+    int** matrix; //матрица для хранения смежности
+    //matrix[i][j] равно 1, если есть ребро из вершины i в вершину j,
+    //и 0 если нет
+
+public:
+    AdjacencyMatrix() : size(0), matrix(nullptr) {}
+
+    // Конструктор, считывающий данные из файла
+    AdjacencyMatrix(const char* filename) {
+        ifstream file(filename); //открытие
+        string line;
+        
+        if (getline(file, line))
+        {
+            size = stoi(line); // преобразование 1 строки в число
+        }
+        
+        // выделяет память для массива указателей на строки:
+        // преобразует из void* в int*
+        // sizeof(int*) - размер указателя
+
+        matrix = (int**)malloc(size * sizeof(int*));
+
+        // выделение памяти для каждой строки
+        for (int i = 0; i < size; ++i)
+        {
+            matrix[i] = (int*)malloc(size * sizeof(int));
+            
+            // Изначально заполняем нулями
+            memset(matrix[i], 0, size * sizeof(int));
+        }
+
+        // Считываем данные матрицы
+        for (int i = 0; i < size; ++i)
+        {
+            if (getline(file, line))
+            {
+                stringstream ss(line); // представление строки в виде чисел
+                string value; //для отдельных значений
+                int j = 0; //индекс столбца
+                while (getline(ss, value, ' ')) // читает из ss
+                { // значения разделены пробелами
+                    if (j < size)
+                    {
+                        matrix[i][j] = stoi(value); //строка в число
+                        j++;
+                    }
+                }
+            }
+        }
+        file.close();
+    }
+
+    // Метод для вывода матрицы в консоль
+    void view() const
+    {
+        for (int i = 0; i < size; ++i)
+        {
+            for (int j = 0; j < size; ++j)
+            {
+                cout << matrix[i][j] << " ";
+            }
+            cout << endl;
+        }
+    }
+
+    // Метод, который возвращает одномерный массив смежности
+    // список ъранит для каждой вершины список соседних вершин
+    // может измениться listSize, но не матрица
+    int* toAdjacencyList(int& listSize) const 
+    {
+        // максимальный размера списка
+        listSize = 0; //кол-во элем в списке
+        for (int i = 0; i < size; ++i)
+        {
+            for (int j = 0; j < size; ++j) //сосед?
+            {
+                if (matrix[i][j] != 0) //есть сосед между i и j
+                {
+                    // ненулевое значение соотв элем в списке
+                    listSize++;
+                }
+            }
+            listSize++; // Для разделителя -1
+            // (показывает конец и начало следующих соседей для вершины в списке)
+        }
+
+        int* adjacencyList = (int*)malloc(listSize * sizeof(int));
+
+        int listIndex = 0; //отслеживание позиции при заполнении
+        for (int i = 0; i < size; ++i)
+        {
+            for (int j = 0; j < size; ++j)
+            {
+                if (matrix[i][j] != 0) // если есть ребро между i и j
+                {
+                    //запись j соседней вершины в текущую позицию
+                    adjacencyList[listIndex++] = j;
+                }
+            }
+            adjacencyList[listIndex++] = -1;
+            // Разделитель для каждой строки/вершины
+        }
+        return adjacencyList;
+    }
+
+    // Метод, который из одномерного массива смежности строит матрицу смежности
+    void fromAdjacencyList(const int* adjacencyList, int newSize, int listSize) {
+        // Освобождаем старую матрицу
+        if (matrix != nullptr) {
+            for (int i = 0; i < size; ++i) {
+                free(matrix[i]);
+            }
+            free(matrix);
+            matrix = nullptr;
+        }
+
+        size = newSize;
+
+        // Выделяем память для новой матрицы
+        matrix = (int**)malloc(size * sizeof(int*));
+
+        for (int i = 0; i < size; ++i)
+        {
+            matrix[i] = (int*)malloc(size * sizeof(int));
+            memset(matrix[i], 0, size * sizeof(int));
+        }
+
+        int vertexIndex = 0; //индекс текущей вершины, для которой заполяем строку в матрице
+        int listIndex = 0; //позиция в списке смежности
+
+        while (vertexIndex < size && listIndex < listSize) {
+            if (adjacencyList[listIndex] == -1) // следующая вершина
+            {
+                vertexIndex++; //следующая строка в матрице
+                listIndex++; //следующий элемент в списке
+            }
+            else { //если это индес соседней вершины
+                if (adjacencyList[listIndex] >= 0 && adjacencyList[listIndex] < size)
+                {
+                    matrix[vertexIndex][adjacencyList[listIndex]] = 1;
+                    // ребро есть
+                }
+                listIndex++;
+            }
+        }
+    }
+
+    int getSize() const {
+        return size;
+    }
+
+    // Деструктор для освобождения памяти
+    ~AdjacencyMatrix() {
+        if (matrix != nullptr) {
+            for (int i = 0; i < size; ++i) {
+                free(matrix[i]);
+            }
+            free(matrix);
+            matrix = nullptr;
+        }
+    }
+};
+
+int main() {
+    setlocale(LC_ALL, "Rus");
+    
+    // Пример из файла
+    AdjacencyMatrix adjMatrix("matrix.txt"); // из файла matrix.txt
+    cout << "Матрица смежности из файла:" << endl;
+    adjMatrix.view(); //вывод содержимого в консоль
+
+
+    // матрица в список смежности
+    int adjListSize; //размер списка
+    //преоразование adjMatrix в adjList
+    int* adjList = adjMatrix.toAdjacencyList(adjListSize);
+    cout << "\nСписок смежности:" << endl;
+    if (adjList != nullptr) {
+        for (int i = 0; i < adjListSize; ++i) {
+            cout << adjList[i] << " ";
+        }
+        cout << endl;
+    }
+
+    AdjacencyMatrix matrixFromList;
+    matrixFromList.fromAdjacencyList(adjList, adjMatrix.getSize(), adjListSize);
+
+    std::cout << "\nМатрица смежности из списка:" << std::endl;
+    matrixFromList.view();
+
+    return 0;
+}

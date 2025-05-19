@@ -1,0 +1,217 @@
+
+#include <iostream>
+#include <string>
+#include <vector>
+
+using namespace std;
+
+// Класс для представления узла суффиксного дерева
+class Node {
+public:
+    int start;
+    int *end; // Указатель на изменяемую переменную end
+    Node *suffixLink;
+    Node *children[256]; // Массив указателей на дочерние узлы (для каждого возможного символа)
+
+    Node(int start, int *end) {
+        this->start = start;
+        this->end = end;
+        this->suffixLink = nullptr;
+        for (int i = 0; i < 256; i++) {
+            this->children[i] = nullptr;
+        }
+    }
+
+    int edgeLength() {
+        return *end - start + 1;
+    }
+};
+
+class SuffixTree {
+public:
+    string text;
+    Node *root;
+    Node *activeNode;
+    int activeEdge;
+    int activeLength;
+    int remainingSuffixCount;
+    int *lastNewNodeEnd;
+    int size; // Текущий размер дерева
+    int rootEnd; // Позиция конца корневого узла
+
+    SuffixTree(string text) {
+        this->text = text;
+        this->size = text.length();
+        this->rootEnd = -1;
+        root = new Node(0, &rootEnd);
+        activeNode = root;
+        activeEdge = -1;
+        activeLength = 0;
+        remainingSuffixCount = 0;
+        lastNewNodeEnd = nullptr;
+
+        // Добавляем терминальный символ, если его нет
+        if (text.back() != '$') {
+            this->text += '$';
+            this->size++;
+        }
+
+        BuildTree();
+    }
+
+    ~SuffixTree() {
+        // TODO: Реализовать удаление дерева для избежания утечек памяти
+        // (обход дерева и удаление узлов)
+        // В упрощенном примере этого не делаем, чтобы код был понятнее
+    }
+
+private:
+    void extendTree(int position) {
+        lastNewNodeEnd = nullptr;
+        remainingSuffixCount++;
+
+        while (remainingSuffixCount > 0) {
+            if (activeLength == 0) {
+                activeEdge = position;
+            }
+
+            int activeEdgeChar = text[activeEdge];
+            if (activeNode->children[activeEdgeChar] == nullptr) {
+                // Правило 2
+                Node *newNode = new Node(position, new int(size - 1));
+                activeNode->children[activeEdgeChar] = newNode;
+
+                if (lastNewNodeEnd != nullptr) {
+                    activeNode->suffixLink = newNode; // Установка суффиксной связи
+                    lastNewNodeEnd = nullptr;
+                }
+            } else {
+                Node *next = activeNode->children[activeEdgeChar];
+                if (activeLength >= next->edgeLength()) {
+                    activeEdge += next->edgeLength();
+                    activeLength -= next->edgeLength();
+                    activeNode = next;
+                    continue;
+                }
+                if (text[next->start + activeLength] == text[position]) {
+                    // Правило 3
+                    activeLength++;
+                    if (lastNewNodeEnd != nullptr && activeNode != root) {
+                         activeNode->suffixLink = root;
+                         lastNewNodeEnd = nullptr;
+
+                    }
+                    break;
+                }
+                // Правило 2:  Разделение ребра
+                Node *splitNode = new Node(next->start, new int(next->start + activeLength - 1));
+                activeNode->children[activeEdgeChar] = splitNode;
+
+                Node *leafNode = new Node(position, new int(size - 1));
+                splitNode->children[text[position]] = leafNode;
+                next->start += activeLength;
+                splitNode->children[text[next->start]] = next;
+
+                if (lastNewNodeEnd != nullptr) {
+                    activeNode->suffixLink = splitNode;
+                }
+
+            lastNewNodeEnd = splitNode;
+            }
+            remainingSuffixCount--;
+
+            if (activeNode == root && activeLength > 0) {
+                activeLength--;
+                activeEdge = position - remainingSuffixCount + 1;
+            } else if (activeNode != root) {
+
+                if (activeNode->suffixLink != nullptr){
+                    activeNode = activeNode->suffixLink;
+
+                } else {
+                    activeNode = root;
+                }
+
+               // Канонизация
+                while (activeLength > 0){
+                        int edgeChar = text[activeEdge];
+                    Node* next = activeNode->children[edgeChar];
+
+                    if (next == nullptr) break;
+                    int edgeLen = next->edgeLength();
+                    if (activeLength >= edgeLen){
+                        activeEdge += edgeLen;
+                        activeLength -= edgeLen;
+                        activeNode = next;
+
+                    } else {
+                        break; // active length is smaller than edge length
+                    }
+                 }
+            }
+        }
+    }
+
+    void BuildTree() {
+        // Последовательное добавление символов строки
+        for (int i = 0; i < size; i++) {
+            extendTree(i);
+        }
+    }
+
+    void PrintTree(){
+        PrintTreeRecursive(root, 0);
+    }
+    void PrintTreeRecursive(Node* node, int depth){
+        if (node == nullptr) return;
+
+        for (int i = 0; i < 256; ++i) {
+            if (node->children[i] != nullptr) {
+                Node* child = node->children[i];
+                for (int j = 0; j < depth; j++) cout << "  ";
+                cout << text.substr(child->start, child->edgeLength()) << endl;
+                PrintTreeRecursive(child, depth + 1);
+            }
+        }
+    }
+
+    bool Contains(string pattern){
+        Node* current = root;
+        int i = 0;
+
+        while(i < pattern.size()){
+
+            if (current->children[pattern[i]] == nullptr) return false;
+
+            Node* nextNode = current->children[pattern[i]];
+
+            int j = 0;
+            while (j < nextNode->edgeLength() && i < pattern.size() && text[nextNode->start + j] == pattern[i]){
+                i++;
+                j++;
+            }
+
+            if (j == nextNode->edgeLength()){
+                current = nextNode;
+            } else {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
+
+int main() {
+    string text = "abcabx";
+    SuffixTree suffixTree(text);
+
+    //suffixTree.PrintTree(); // Выводит дерево (можно раскомментировать для просмотра структуры)
+
+    cout << "Contains 'abc': " << suffixTree.Contains("abc") << endl;
+    cout << "Contains 'abx': " << suffixTree.Contains("abx") << endl;
+    cout << "Contains 'cab': " << suffixTree.Contains("cab") << endl;
+    cout << "Contains 'xyz': " << suffixTree.Contains("xyz") << endl;
+
+    return 0;
+}
